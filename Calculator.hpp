@@ -7,10 +7,12 @@
 
 /*
  *
- * (, ) - 5
- * ** - 4
- * %, *, / - 3
- * +(binary), -(binary) - 2
+ * (, ) - 7
+ * +(unary), -(unary) - 6
+ * ** - 5
+ * %, *, / - 4
+ * +(binary), -(binary) - 3
+ * ~ - 2
  * &, ^, | - 1
  *
  */
@@ -34,6 +36,7 @@ namespace mpl {
             Bitand,
             Bitor,
             Bitxor,
+            Bitnot,
 
             Number,
 
@@ -80,15 +83,7 @@ namespace mpl {
 
             }
 
-            if (symbol == '+') {
-
-                if (!isOperand || string.empty()) return Token(Tokens::Plus, '+');
-
-                symbol = string[0];
-
-                string.erase(string.begin());
-
-            }
+            if (symbol == '+') return Token(Tokens::Plus, '+');
 
             if (symbol == '/') return Token(Tokens::Divide, '/');
 
@@ -99,6 +94,8 @@ namespace mpl {
             if (symbol == '|') return Token(Tokens::Bitor, '|');
 
             if (symbol == '^') return Token(Tokens::Bitxor, '^');
+
+            if (symbol == '~') return Token(Tokens::Bitnot, '~');
 
             if (symbol == '*') {
 
@@ -210,11 +207,29 @@ namespace mpl {
 
         static void compress(std::string &string) {
 
+            std::string temp;
+
             for (auto iterator = string.begin(); iterator != string.end(); ++iterator)
 
                 if (*iterator == ' ' && (!isdigit(*(iterator - 1)) || !isdigit(*(iterator + 1))))
 
                     string.erase(iterator--);
+
+                else if (*iterator == '~') {
+
+                    auto iterator2 = iterator;
+
+                    do {
+
+                        temp += '~';
+
+                        string.erase(iterator);
+
+                    } while (!string.empty() && *(iterator++) == '~');
+
+                    if (temp.length() % 2 != 0) string.insert(iterator2, '~');
+
+                }
 
         }
 
@@ -222,7 +237,7 @@ namespace mpl {
 
             return (type == Tokens::Plus || type == Tokens::Minus ||
                 type == Tokens::Multiple || type == Tokens::Divide || type == Tokens::PercentDivide ||
-                type == Tokens::Bitand || type == Tokens::Bitor || type == Tokens::Bitxor ||
+                type == Tokens::Bitand || type == Tokens::Bitor || type == Tokens::Bitxor || type == Tokens::Bitnot ||
                 type == Tokens::Pow);
 
         }
@@ -260,6 +275,74 @@ namespace mpl {
                 } else ++i;
 
             }
+
+        }
+
+        static bool calculate_all_unary_pluses_and_minuses_helper(std::string &str2, Token &valT, double &value, const bool &isRToV) {
+
+            test:
+
+            valT = get_next_token(str2, false);
+
+            if (valT.type == Tokens::Minus) { value = -value; goto test; }
+
+            else if (valT.type == Tokens::Plus) goto test;
+
+            else if (valT.type == Tokens::Number) { if (isRToV) value *= valT.value; }
+
+            else throw bad_syntax();
+
+            return false;
+
+        }
+
+        static void calculate_all_unary_pluses_and_minuses(std::string &string) {
+
+            Token valT, opT;
+
+            double value;
+
+            std::string str2 = string, str3, temp;
+
+            while (!str2.empty()) {
+
+                value = 1.;
+
+                calculate_all_unary_pluses_and_minuses_helper(str2, valT, value, true);
+
+                if (str2.empty()) {
+
+                    erase_token(str3);
+
+                    str3 += std::to_string(value);
+
+                    break;
+
+                }
+
+                opT = get_next_token(str2, false);
+
+                calculate_all_unary_pluses_and_minuses_helper(str2, valT, value, false);
+
+                erase_token(str3);
+
+                temp = std::to_string(valT.value);
+
+                str3 += std::to_string(value);
+
+                if (opT.type == Tokens::Pow) str3 += "**";
+
+                else str3 += char(opT.value);
+
+                str3 += temp;
+
+                if (str2.empty()) break;
+
+                str2.insert(0, temp);
+
+            }
+
+            string = str3;
 
         }
 
@@ -600,6 +683,8 @@ namespace mpl {
         static double _calculate(std::string &string) {
 
             calculate_all_brackets(string);
+
+            calculate_all_unary_pluses_and_minuses(string);
 
             calculate_all_powers(string);
 
